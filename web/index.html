@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="el" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#16171A" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NillyView Pro" />
+  <meta name="author" content="Nilly graphics (Sotiris Christos) — https://nillygraphics.com/" />
+  <meta name="description" content="NillyView Pro — Πανάλαφρος, ακαριαίος Image, Camera RAW (38+ formats), SVG, HEIC & PSD Viewer + Quick Editor. created by Nilly graphics (Sotiris Christos)." />
+  <title>NillyView Pro — Image &amp; RAW Studio | Nilly graphics</title>
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <!-- TOP STUDIO BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="btnToggleFilmstrip" class="icon-btn" title="Λωρίδα εικόνων / Filmstrip (F)" aria-label="Filmstrip">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="15" x2="9" y2="20"/><line x1="15" y1="15" x2="15" y2="20"/></svg>
+        </button>
+        <div class="brand" id="btnHomeLogo" title="NillyView Pro — created by Nilly graphics (Sotiris Christos)">
+          <span class="brand-mark"></span>
+          <span class="brand-name">NillyView Pro</span>
+        </div>
+        <span id="imgFileName" class="doc-filename" title=""></span>
+        <span id="imgQuickSpec" class="quick-spec" hidden></span>
+      </div>
+
+      <div class="topbar-center" id="navControls" hidden>
+        <div class="pill-group" id="folderNavGroup" hidden>
+          <button id="btnPrevImg" class="icon-btn sm" title="Προηγούμενη εικόνα (←)">‹</button>
+          <span id="lblImgPos" class="page-counter">1 / 1</span>
+          <button id="btnNextImg" class="icon-btn sm" title="Επόμενη εικόνα (→)">›</button>
+        </div>
+        <div class="pill-group">
+          <button id="btnZoomOut" class="icon-btn sm" title="Σμίκρυνση (−)">−</button>
+          <span id="lblZoom" class="zoom-label">Fit</span>
+          <button id="btnZoomIn" class="icon-btn sm" title="Μεγέθυνση (+)">+</button>
+          <button id="btnZoom100" class="text-btn sm" title="100% Πραγματικά Pixels (1)">1:1</button>
+          <button id="btnZoomFit" class="text-btn sm" title="Προσαρμογή στην οθόνη (0)">Fit</button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="btnOpenImg" class="text-btn" title="Άνοιγμα εικόνας / RAW / SVG / PSD (Ctrl+O)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span class="hide-xs">Άνοιγμα</span>
+        </button>
+        <button id="btnToggleEdit" class="text-btn" title="Επεξεργασία — Crop, Rotate, Σχεδίαση, Blur, Eyedropper (E)" hidden>
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span class="hide-xs">Επεξεργασία</span>
+        </button>
+        <button id="btnBackdrop" class="icon-btn" title="Φόντο καμβά: Dark / Checkerboard / Light / Black (B)" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="3" y="3" width="9" height="9" fill="currentColor" fill-opacity="0.35"/><rect x="12" y="12" width="9" height="9" fill="currentColor" fill-opacity="0.35"/></svg>
+        </button>
+        <button id="btnToggleInfo" class="icon-btn" title="Πληροφορίες, mm @ 300 DPI, EXIF &amp; Ιστόγραμμα (I)" hidden>
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </button>
+        <div class="menu-anchor" id="moreMenuWrap" hidden>
+          <button id="btnMoreMenu" class="icon-btn" title="Περισσότερες ενέργειες" aria-label="Περισσότερα">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+          </button>
+          <div id="moreMenu" class="popover-menu" hidden>
+            <button class="menu-item" id="btnCopyImg"><span>Αντιγραφή εικόνας</span><em>Ctrl+C</em></button>
+            <button class="menu-item" id="btnQuickRotR"><span>Περιστροφή 90° Δεξιά</span><em>R</em></button>
+            <button class="menu-item" id="btnQuickRotL"><span>Περιστροφή 90° Αριστερά</span><em>L</em></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" id="btnSlideshow"><span>Παρουσίαση (Slideshow)</span><em>F5</em></button>
+            <button class="menu-item" id="btnFullscreen"><span>Πλήρης Οθόνη</span><em>F11</em></button>
+            <button class="menu-item" id="btnPrintImg"><span>Εκτύπωση</span><em>Ctrl+P</em></button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" id="btnRevealExplorer" hidden><span>Εμφάνιση στον Explorer</span><em>Ctrl+E</em></button>
+            <button class="menu-item danger" id="btnDeleteRecycle" hidden><span>Μετακίνηση στον Κάδο</span><em>Del</em></button>
+          </div>
+        </div>
+        <button id="btnSaveOpen" class="primary-btn" title="Αποθήκευση / Μετατροπή WebP·JPG·PNG + Resize (Ctrl+S)" hidden>Εξαγωγή</button>
+        <button id="btnThemeToggle" class="icon-btn" title="Εναλλαγή Dark / Light">◐</button>
+      </div>
+    </header>
+
+    <!-- QUICK EDIT / PAINT TOOL STRIP (Hidden during pure viewing — toggles with E!) -->
+    <nav id="editStrip" class="tool-strip" hidden aria-label="Εργαλεία επεξεργασίας">
+      <div class="tool-group">
+        <button class="tool-btn active" data-tool="pan" title="Μετακίνηση / Επιλογή (V)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-7 1.5L9 21z"/></svg>
+          <span>Επιλογή</span>
+        </button>
+        <button class="tool-btn" data-tool="crop" title="Περικοπή / Crop (C)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+          <span>Crop</span>
+        </button>
+        <button class="tool-btn" data-tool="eyedropper" title="Color Eyedropper — HEX / RGB / CMYK (K)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 22l5-1 11-11-4-4L3 17l-1 5z"/><path d="M14 6l4 4"/><path d="M16 4l4 4"/></svg>
+          <span>Χρώμα</span>
+        </button>
+        <button class="tool-btn" data-tool="arrow" title="Βέλος (A)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="10 5 19 5 19 14"/></svg>
+          <span>Βέλος</span>
+        </button>
+        <button class="tool-btn" data-tool="rect" title="Πλαίσιο (R)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>
+          <span>Πλαίσιο</span>
+        </button>
+        <button class="tool-btn" data-tool="pen" title="Στυλό (P)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          <span>Στυλό</span>
+        </button>
+        <button class="tool-btn" data-tool="text" title="Κείμενο Ελληνικά/Αγγλικά (T)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          <span>Κείμενο</span>
+        </button>
+        <button class="tool-btn" data-tool="blur" title="Θόλωμα / Απόκρυψη ευαίσθητων στοιχείων (U)">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h2v2H7zM11 9h2v2h-2zM15 9h2v2h-2zM9 13h2v2H9zM13 13h2v2h-2z" fill="currentColor"/></svg>
+          <span>Blur</span>
+        </button>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <!-- Transform & Color Swatches -->
+      <div class="tool-group compact">
+        <button id="btnRotLeft" class="icon-btn sm" title="Περιστροφή -90°">↺</button>
+        <button id="btnRotRight" class="icon-btn sm" title="Περιστροφή +90°">↻</button>
+        <button id="btnFlipH" class="icon-btn sm" title="Καθρέφτης Οριζόντια">⇄</button>
+        <button id="btnFlipV" class="icon-btn sm" title="Καθρέφτης Κάθετα">⇅</button>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <div class="tool-props">
+        <div class="ink-dots" id="inkPalette">
+          <button class="ink-dot active" data-color="#EF4444" style="--c:#EF4444" title="Κόκκινο"></button>
+          <button class="ink-dot" data-color="#2563EB" style="--c:#2563EB" title="Μπλε"></button>
+          <button class="ink-dot" data-color="#FACC15" style="--c:#FACC15" title="Κίτρινο"></button>
+          <button class="ink-dot" data-color="#10B981" style="--c:#10B981" title="Πράσινο"></button>
+          <button class="ink-dot" data-color="#FFFFFF" style="--c:#FFFFFF" title="Λευκό"></button>
+          <button class="ink-dot" data-color="#111827" style="--c:#111827" title="Μαύρο"></button>
+        </div>
+        <select id="selBrushSize" class="mini-select" title="Πάχος / Μέγεθος">
+          <option value="3">Λεπτό</option>
+          <option value="6" selected>Μεσαίο</option>
+          <option value="12">Χοντρό</option>
+          <option value="24">Μεγάλο</option>
+        </select>
+        <button id="btnAdjustToggle" class="toggle-chip" title="Φωτεινότητα / Αντίθεση / Κορεσμός">Φως</button>
+      </div>
+
+      <div class="tool-divider"></div>
+
+      <div class="tool-group compact">
+        <button id="btnUndo" class="icon-btn sm" title="Αναίρεση (Ctrl+Z)">↶</button>
+        <button id="btnRedo" class="icon-btn sm" title="Επανάληψη (Ctrl+Y)">↷</button>
+        <button id="btnResetEdits" class="text-btn sm" title="Επαναφορά αρχικής εικόνας">Reset</button>
+      </div>
+    </nav>
+
+    <!-- CONTEXTUAL CROP BAR (shows only when Crop tool is active) -->
+    <div id="cropBar" class="sub-bar" hidden>
+      <span class="sub-label">Αναλογία:</span>
+      <div class="seg-mini" id="cropRatioRow">
+        <button class="seg-m active" data-ratio="0">Ελεύθερο</button>
+        <button class="seg-m" data-ratio="1">1:1</button>
+        <button class="seg-m" data-ratio="1.7777">16:9</button>
+        <button class="seg-m" data-ratio="1.3333">4:3</button>
+        <button class="seg-m" data-ratio="0.8">4:5 IG</button>
+        <button class="seg-m" data-ratio="0.5625">9:16</button>
+        <button class="seg-m" data-ratio="0.7071">A4</button>
+      </div>
+      <span id="lblCropDims" class="crop-dims"></span>
+      <button id="btnApplyCrop" class="primary-btn sm">Εφαρμογή Crop</button>
+      <button id="btnCancelCrop" class="text-btn sm">Ακύρωση</button>
+    </div>
+
+    <!-- CONTEXTUAL LIGHT/COLOR ADJUSTMENTS BAR -->
+    <div id="adjustBar" class="sub-bar" hidden>
+      <label class="adj-item"><span>Φωτεινότητα</span><input id="rngBright" type="range" min="50" max="150" value="100" /><em id="valBright">100%</em></label>
+      <label class="adj-item"><span>Αντίθεση</span><input id="rngContrast" type="range" min="50" max="150" value="100" /><em id="valContrast">100%</em></label>
+      <label class="adj-item"><span>Κορεσμός</span><input id="rngSat" type="range" min="0" max="200" value="100" /><em id="valSat">100%</em></label>
+      <button id="btnGrayToggle" class="toggle-chip">B&amp;W</button>
+      <button id="btnResetAdjust" class="text-btn sm">Μηδενισμός</button>
+    </div>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="workspace" id="dropTarget">
+      <!-- CENTER DARKROOM STAGE -->
+      <section class="desk backdrop-dark" id="deskViewport">
+        <!-- EMPTY / WELCOME VIEW -->
+        <div id="emptyState" class="empty-state">
+          <div class="empty-card">
+            <div class="empty-icon">
+              <img src="./icon.svg" width="54" height="54" alt="NillyView Pro" />
+            </div>
+            <h1>Άνοιξε εικόνα, Camera RAW, SVG ή PSD</h1>
+            <p class="empty-sub">Υποστηρίζει <strong>62+ formats</strong> (JPG, PNG, WebP, AVIF, SVG, HEIC, JXL, TIFF, PSD, TGA, Affinity &amp; 38 Camera RAW: CR2/CR3/NEF/ARW/DNG/RAF/ORF). Πανάλαφρο, ακαριαίο, 100% τοπικά.</p>
+            <div class="empty-actions">
+              <button id="btnEmptyOpen" class="primary-btn lg">Άνοιγμα Εικόνας</button>
+              <button id="btnEmptyPaste" class="secondary-btn lg">Επικόλληση (Ctrl+V)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- FLOATING PREV/NEXT EDGE ARROWS -->
+        <button id="btnEdgePrev" class="edge-arrow left" title="Προηγούμενη (←)" hidden>‹</button>
+        <button id="btnEdgeNext" class="edge-arrow right" title="Επόμενη (→)" hidden>›</button>
+
+        <!-- LIVE IMAGE & EDIT CANVAS STAGE -->
+        <div id="stageWrap" class="stage-wrap" hidden>
+          <div id="imgStage" class="img-stage">
+            <canvas id="viewCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+            <div id="loadingBadge" class="loading-badge" hidden>Αποκωδικοποίηση RAW…</div>
+          </div>
+        </div>
+
+        <!-- EYEDROPPER LIVE COLOR PILL -->
+        <div id="colorPill" class="color-pill" hidden>
+          <span id="colorSwatch" class="color-swatch"></span>
+          <span id="colorHex" class="color-code">#000000</span>
+          <span id="colorRgb" class="color-sub">rgb(0,0,0)</span>
+          <span id="colorCmyk" class="color-sub">CMYK 0,0,0,100</span>
+        </div>
+      </section>
+
+      <!-- RIGHT PREPRESS & EXIF INSPECTOR DRAWER -->
+      <aside id="infoRail" class="side-rail right" hidden>
+        <div class="rail-header">
+          <span>Πληροφορίες &amp; EXIF</span>
+          <button id="btnCloseInfo" class="icon-btn xs">✕</button>
+        </div>
+        <div class="info-body">
+          <div class="hist-card">
+            <span class="hist-label">RGB Ιστόγραμμα</span>
+            <canvas id="histCanvas" width="248" height="72"></canvas>
+          </div>
+          <div id="infoGrid" class="info-grid"></div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- BOTTOM FOLDER FILMSTRIP (toggleable with F) -->
+    <div id="filmstrip" class="filmstrip" hidden>
+      <div id="filmstripTrack" class="filmstrip-track"></div>
+    </div>
+
+    <!-- QUIET STUDIO STATUS FOOTER -->
+    <footer class="studio-footer">
+      <span id="statusText">Έτοιμο · 62+ formats · 100% τοπικά</span>
+      <a href="https://nillygraphics.com/" target="_blank" rel="noopener" class="brand-credit">created by Nilly graphics (Sotiris Christos) — nillygraphics.com</a>
+    </footer>
+  </div>
+
+  <!-- HIDDEN FILE INPUT (for Web / Mobile PWA mode) -->
+  <input id="fileOpenInput" type="file" accept="image/*,.svg,.svgz,.webp,.avif,.heic,.tif,.tiff,.psd,.tga,.dng,.cr2,.cr3,.nef,.arw,.raf" multiple hidden />
+
+  <!-- MODAL 1: SMART EXPORT, CONVERT & RESIZE SHEET -->
+  <div id="modalExport" class="modal-backdrop" hidden>
+    <div class="modal-sheet">
+      <div class="modal-head">
+        <div>
+          <h2>Εξαγωγή, Μετατροπή &amp; Resize</h2>
+          <p id="lblExportMeta" class="modal-sub">Επίλεξε μορφή (WebP / JPG / PNG / ICO) &amp; μέγεθος</p>
+        </div>
+        <button class="icon-btn sm" data-close="modalExport">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label" for="inpExportName">Όνομα αρχείου</label>
+        <input id="inpExportName" type="text" class="text-input" value="image" />
+
+        <label class="field-label">Μορφή αρχείου</label>
+        <div class="seg-row four" id="expFmtRow">
+          <button class="seg-btn active" data-fmt="webp">WebP (SEO)</button>
+          <button class="seg-btn" data-fmt="jpeg">JPG</button>
+          <button class="seg-btn" data-fmt="png">PNG</button>
+          <button class="seg-btn" data-fmt="ico">ICO</button>
+        </div>
+
+        <label class="field-label">Μέγεθος (Resize ταυτόχρονα)</label>
+        <div class="size-grid" id="expSizeGrid">
+          <button class="size-card" data-size="small">
+            <strong>Small</strong>
+            <span>Web / Social · max 1200 px</span>
+            <em class="est-tag" data-est="small">—</em>
+          </button>
+          <button class="size-card" data-size="medium">
+            <strong>Medium</strong>
+            <span>HD · max 1920 px</span>
+            <em class="est-tag" data-est="medium">—</em>
+          </button>
+          <button class="size-card" data-size="large">
+            <strong>Large</strong>
+            <span>Υψηλή ανάλυση · max 3000 px</span>
+            <em class="est-tag" data-est="large">—</em>
+          </button>
+          <button class="size-card active" data-size="original">
+            <strong>Original</strong>
+            <span>Αρχική ανάλυση · 100%</span>
+            <em class="est-tag" data-est="original">—</em>
+          </button>
+        </div>
+
+        <div class="custom-dims-row">
+          <label class="field-label" style="margin:0">Πλάτος × Ύψος (px):</label>
+          <input id="inpExpW" type="number" min="16" max="16000" class="dim-input" />
+          <span>×</span>
+          <input id="inpExpH" type="number" min="16" max="16000" class="dim-input" />
+          <label class="range-inline" id="expQualWrap">
+            <span>Ποιότητα: <strong id="lblExpQual">88%</strong></span>
+            <input id="rngExpQual" type="range" min="45" max="100" value="88" />
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="secondary-btn" data-close="modalExport">Ακύρωση</button>
+        <button id="btnSaveDirectDesktop" class="secondary-btn" hidden>Αντικατάσταση αρχείου</button>
+        <button id="btnConfirmExport" class="primary-btn">Αποθήκευση</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: ADD TEXT OVERLAY -->
+  <div id="modalText" class="modal-backdrop" hidden>
+    <div class="modal-sheet compact">
+      <div class="modal-head">
+        <h2>Προσθήκη Κειμένου</h2>
+        <button class="icon-btn sm" data-close="modalText">✕</button>
+      </div>
+      <div class="modal-body">
+        <textarea id="txtOverlayInput" class="text-area" rows="2" placeholder="Γράψε εδώ (Ελληνικά &amp; Αγγλικά)..."></textarea>
+        <label class="check-row">
+          <input id="chkTextBackdrop" type="checkbox" />
+          <span>Φόντο πίσω από το κείμενο (υψηλή αναγνωσιμότητα)</span>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="secondary-btn" data-close="modalText">Ακύρωση</button>
+        <button id="btnCommitText" class="primary-btn">Τοποθέτηση</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

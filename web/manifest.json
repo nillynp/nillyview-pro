@@ -1,0 +1,17 @@
+{
+  "name": "NillyView Pro — Image & RAW Studio",
+  "short_name": "NillyView Pro",
+  "description": "Ultra-light minimal Image, RAW, SVG & PSD Viewer + Quick Editor. created by Nilly graphics (Sotiris Christos) — https://nillygraphics.com/",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#16171A",
+  "theme_color": "#16171A",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
