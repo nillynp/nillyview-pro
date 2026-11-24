@@ -37,7 +37,7 @@ if ($needBuild) {
     $cscArgs = @(
         '/nologo', '/target:winexe', '/optimize+', "/out:$exePath",
         '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll',
-        "/r:$wpf\PresentationCore.dll", "/r:$wpf\WindowsBase.dll", "/r:$wpf\System.Xaml.dll"
+        "/r:$wpf\PresentationCore.dll", "/r:$wpf\WindowsBase.dll", "/r:$fxDir\System.Xaml.dll"
     )
     if (Test-Path $icoPath) { $cscArgs += "/win32icon:$icoPath" }
     $cscArgs += $srcPath
@@ -77,29 +77,21 @@ New-Item -Path "$capKey\FileAssociations" -Force | Out-Null
 Set-ItemProperty -Path $capKey -Name 'ApplicationName' -Value 'NillyView Pro'
 Set-ItemProperty -Path $capKey -Name 'ApplicationDescription' -Value 'Ultra-light Image, Camera RAW (38+), SVG & PSD Studio — created by Nilly graphics (Sotiris Christos) — https://nillygraphics.com/'
 
-$defaultExts = @(
+$allExts = @(
     '.jpg','.jpeg','.jpe','.jfif','.png','.webp','.avif','.gif','.bmp','.dib','.ico','.svg','.svgz',
-    '.heic','.heif','.hif','.jxl','.tif','.tiff','.dds','.jxr','.wdp','.hdp','.tga',
+    '.heic','.heif','.hif','.jxl','.tif','.tiff','.dds','.jxr','.wdp','.hdp',
     '.cr2','.cr3','.crw','.nef','.nrw','.arw','.sr2','.srf','.dng','.raf',
     '.orf','.ori','.rw2','.rwl','.pef','.ptx','.srw','.3fr','.fff','.iiq',
     '.x3f','.kdc','.dcr','.mrw','.mef','.mos','.erf','.raw','.ari','.bay',
-    '.cap','.dcs','.drf','.eip','.k25','.pxn'
+    '.cap','.dcs','.drf','.eip','.k25','.pxn',
+    '.psd','.psb','.tga','.afdesign','.afphoto','.afpub'
 )
-# Design project files stay in Open With (never hijacking Affinity/Photoshop on 1-click Set Default!)
-$openWithOnlyExts = @('.psd','.psb','.afdesign','.afphoto','.afpub')
-$allExts = $defaultExts + $openWithOnlyExts
-
-# Refresh FileAssociations cleanly so only image/RAW/SVG formats appear in 1-click Set Default
-Remove-Item -Path "$capKey\FileAssociations" -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -Path "$capKey\FileAssociations" -Force | Out-Null
 
 foreach ($ext in $allExts) {
     $owp = "HKCU:\Software\Classes\$ext\OpenWithProgids"
     New-Item -Path $owp -Force | Out-Null
     Set-ItemProperty -Path $owp -Name 'NillyViewPro.Image' -Value ([byte[]]@()) -Type Binary
     Set-ItemProperty -Path "$appKey\SupportedTypes" -Name $ext -Value ''
-}
-foreach ($ext in $defaultExts) {
     Set-ItemProperty -Path "$capKey\FileAssociations" -Name $ext -Value 'NillyViewPro.Image'
 }
 
@@ -139,8 +131,8 @@ Write-Host '   -> Ή δεξί κλικ σε εικόνα (π.χ. JPG/PNG/WebP/SV
 Write-Host ''
 
 if ($OpenDefaultApps) {
-    Start-Process 'ms-settings:defaultapps?registeredAppUser=NillyViewPro'
+    Start-Process 'ms-settings:defaultapps'
 } elseif (-not $Silent) {
-    $ans = Read-Host '  Θες να ανοίξω τώρα τις Προεπιλεγμένες Εφαρμογές του NillyView Pro (Ν/Ο)?'
-    if ($ans -match '^[yYνΝ]') { Start-Process 'ms-settings:defaultapps?registeredAppUser=NillyViewPro' }
+    $ans = Read-Host '  Θες να ανοίξω τώρα τις Προεπιλεγμένες Εφαρμογές των Windows (Ν/Ο)?'
+    if ($ans -match '^[yYνΝ]') { Start-Process 'ms-settings:defaultapps' }
 }

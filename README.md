@@ -51,7 +51,7 @@
 
 ## Εγκατάσταση σε ΟΠΟΙΟΔΗΠΟΤΕ Windows 10/11 PC (100% Portable · Χωρίς Admin)
 
-1. Κατέβασε το `NillyView-Pro-v1.0-Portable.zip` από τα [GitHub Releases](https://github.com/nillynp/nillyview-pro/releases) και αποσυμπίεσέ το όπου θες (π.χ. `C:\Tools\NillyViewPro`).
+1. Κατέβασε το `NillyView-Pro-v1.1-Portable.zip` από τα [GitHub Releases](https://github.com/nillynp/nillyview-pro/releases) και αποσυμπίεσέ το όπου θες (π.χ. `C:\Tools\NillyViewPro`).
 2. Τρέξε με διπλό κλικ το **`Install_NillyViewPro.bat`** (δεν απαιτεί δικαιώματα Administrator!).
    - Μεταγλωττίζει αυτόματα το native **`NillyViewPro.exe` (~45 KB)** με τον ενσωματωμένο .NET compiler των Windows (0 εξωτερικά downloads).
    - Εγγράφει όλα τα **62+ formats** στα Windows (`Άνοιγμα με...` & `Προεπιλεγμένες Εφαρμογές`) και φτιάχνει συντομεύσεις σε Desktop & Start Menu.
