@@ -29,8 +29,8 @@ using System.Windows.Media.Imaging;
 [assembly: AssemblyCompany("Nilly graphics (Sotiris Christos) — https://nillygraphics.com/")]
 [assembly: AssemblyProduct("NillyView Pro")]
 [assembly: AssemblyCopyright("Copyright (c) Nilly graphics (Sotiris Christos)")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyFileVersion("1.2.0.0")]
 
 namespace NillyViewPro
 {
@@ -46,6 +46,7 @@ namespace NillyViewPro
         private static volatile bool _running = true;
         private static volatile bool _sawClient = false;
         private static volatile bool _byeReceived = false;
+        private static int _activeBusyOps = 0;
         private static long _lastPingTicks = DateTime.UtcNow.Ticks;
         private static long _byeTicks = 0;
         private static long _startTicks = DateTime.UtcNow.Ticks;
@@ -107,6 +108,85 @@ namespace NillyViewPro
 
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+        [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+        [DllImport("user32.dll", CharSet = CharSet.Auto)] private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+        [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr CreateIconFromResourceEx(byte[] presbits, uint dwResSize, bool fIcon, uint dwVer, int cxDesired, int cyDesired, uint Flags);
+        [DllImport("kernel32.dll")] private static extern IntPtr GetCurrentProcess();
+        [DllImport("kernel32.dll")] private static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr minSize, IntPtr maxSize);
+
+        private static void TrimMemory()
+        {
+            try
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, false);
+                SetProcessWorkingSetSize(GetCurrentProcess(), (IntPtr)(-1), (IntPtr)(-1));
+            }
+            catch { }
+        }
+
+        private static IntPtr CreateHIconFromIcoBytes(byte[] icoData, int desiredSize)
+        {
+            if (icoData == null || icoData.Length < 22) return IntPtr.Zero;
+            int count = BitConverter.ToUInt16(icoData, 4);
+            if (count <= 0 || count > 32) return IntPtr.Zero;
+            int bestIdx = 0, bestDiff = int.MaxValue;
+            for (int i = 0; i < count; i++)
+            {
+                int off = 6 + i * 16;
+                if (off + 16 > icoData.Length) break;
+                int w = icoData[off]; if (w == 0) w = 256;
+                int diff = Math.Abs(w - desiredSize);
+                if (w >= desiredSize && diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+                else if (bestDiff == int.MaxValue && diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+            }
+            int eOff = 6 + bestIdx * 16;
+            int len = BitConverter.ToInt32(icoData, eOff + 8);
+            int imgOff = BitConverter.ToInt32(icoData, eOff + 12);
+            if (len <= 0 || imgOff < 0 || imgOff + len > icoData.Length) return IntPtr.Zero;
+            byte[] slice = new byte[len]; Buffer.BlockCopy(icoData, imgOff, slice, 0, len);
+            return CreateIconFromResourceEx(slice, (uint)len, true, 0x00030000, desiredSize, desiredSize, 0);
+        }
+
+        private static void StartTaskbarIconSync()
+        {
+            Thread t = new Thread(delegate()
+            {
+                try
+                {
+                    string icoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NillyViewPro.ico");
+                    if (!File.Exists(icoPath)) icoPath = Path.Combine(_webRoot, "favicon.ico");
+                    if (!File.Exists(icoPath)) return;
+                    byte[] icoBytes = File.ReadAllBytes(icoPath);
+                    IntPtr hBig = CreateHIconFromIcoBytes(icoBytes, 48);
+                    IntPtr hSmall = CreateHIconFromIcoBytes(icoBytes, 16);
+                    if (hBig == IntPtr.Zero && hSmall == IntPtr.Zero) return;
+                    for (int attempt = 0; attempt < 25 && _running; attempt++)
+                    {
+                        Thread.Sleep(attempt < 8 ? 250 : 600);
+                        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam)
+                        {
+                            if (!IsWindowVisible(hWnd)) return true;
+                            StringBuilder sb = new StringBuilder(256);
+                            if (GetWindowText(hWnd, sb, sb.Capacity) <= 0) return true;
+                            if (sb.ToString().IndexOf("NillyView Pro", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                IntPtr res;
+                                if (hBig != IntPtr.Zero) SendMessageTimeout(hWnd, 0x0080, (IntPtr)1, hBig, 0x0002, 200, out res);
+                                if (hSmall != IntPtr.Zero) SendMessageTimeout(hWnd, 0x0080, (IntPtr)0, hSmall, 0x0002, 200, out res);
+                            }
+                            return true;
+                        }, IntPtr.Zero);
+                    }
+                    TrimMemory();
+                }
+                catch { }
+            });
+            t.IsBackground = true; t.Start();
+        }
 
         [STAThread]
         static int Main(string[] args)
@@ -184,10 +264,10 @@ namespace NillyViewPro
                     DateTime byeAt = new DateTime(Interlocked.Read(ref _byeTicks), DateTimeKind.Utc);
                     if ((now - byeAt).TotalSeconds >= 2.2) { _running = false; break; }
                 }
-                if (_sawClient)
+                if (_sawClient && Interlocked.CompareExchange(ref _activeBusyOps, 0, 0) == 0)
                 {
                     DateTime lastPing = new DateTime(Interlocked.Read(ref _lastPingTicks), DateTimeKind.Utc);
-                    if ((now - lastPing).TotalSeconds >= 10.0) { _running = false; break; }
+                    if ((now - lastPing).TotalSeconds >= 25.0) { _running = false; break; }
                 }
                 else
                 {
@@ -317,6 +397,7 @@ namespace NillyViewPro
                     psi.Arguments = "--app=\"" + url + "\" --window-size=1320,860";
                     psi.UseShellExecute = false;
                     Process.Start(psi);
+                    StartTaskbarIconSync();
                     return;
                 }
                 catch { }
@@ -380,7 +461,7 @@ namespace NillyViewPro
                     HttpRequest req = ReadHttpRequest(stream);
                     if (req == null) return;
                     if (req.Path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
-                        HandleApi(stream, req);
+                        HandleApi(client, stream, req);
                     else
                         HandleStaticFile(stream, req);
                 }
@@ -498,7 +579,7 @@ namespace NillyViewPro
             return _currentIndex;
         }
 
-        private static void HandleApi(NetworkStream stream, HttpRequest req)
+        private static void HandleApi(TcpClient client, NetworkStream stream, HttpRequest req)
         {
             if (!VerifyToken(req))
             {
@@ -506,10 +587,14 @@ namespace NillyViewPro
                 return;
             }
 
-            if (string.Equals(req.Path, "/api/heartbeat", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(req.Path, "/api/bye", StringComparison.OrdinalIgnoreCase))
             {
                 _sawClient = true; _byeReceived = false;
                 Interlocked.Exchange(ref _lastPingTicks, DateTime.UtcNow.Ticks);
+            }
+
+            if (string.Equals(req.Path, "/api/heartbeat", StringComparison.OrdinalIgnoreCase))
+            {
                 SendResponse(stream, 204, "No Content", null, null, null);
                 return;
             }
@@ -530,28 +615,52 @@ namespace NillyViewPro
 
             if (string.Equals(req.Path, "/api/open-file", StringComparison.OrdinalIgnoreCase) && req.Method == "POST")
             {
-                string chosen = null;
-                Thread sta = new Thread(delegate()
+                Interlocked.Increment(ref _activeBusyOps);
+                try
                 {
-                    try
+                    try { client.SendTimeout = 0; client.ReceiveTimeout = 600000; } catch { }
+                    string chosen = null;
+                    Thread sta = new Thread(delegate()
                     {
-                        using (OpenFileDialog dlg = new OpenFileDialog())
+                        try
                         {
-                            dlg.Title = "NillyView Pro — Άνοιγμα Εικόνας / RAW / SVG / PSD";
-                            dlg.Filter = "Όλες οι εικόνες & RAW (62 formats)|*.jpg;*.jpeg;*.png;*.webp;*.avif;*.gif;*.svg;*.svgz;*.bmp;*.ico;*.heic;*.heif;*.jxl;*.tif;*.tiff;*.cr2;*.cr3;*.nef;*.arw;*.dng;*.raf;*.orf;*.rw2;*.pef;*.srw;*.raw;*.psd;*.tga;*.afdesign;*.afphoto;*.ai;*.eps|Camera RAW|*.cr2;*.cr3;*.crw;*.nef;*.nrw;*.arw;*.dng;*.raf;*.orf;*.rw2;*.pef;*.srw;*.raw;*.3fr;*.fff;*.iiq;*.x3f|Όλα τα αρχεία|*.*";
-                            if (!string.IsNullOrEmpty(_currentFolder) && Directory.Exists(_currentFolder))
-                                dlg.InitialDirectory = _currentFolder;
-                            if (dlg.ShowDialog() == DialogResult.OK) chosen = dlg.FileName;
-                        }
-                    }
-                    catch { }
-                });
-                sta.SetApartmentState(ApartmentState.STA);
-                sta.Start();
-                sta.Join();
+                            using (Form owner = new Form())
+                            {
+                                owner.FormBorderStyle = FormBorderStyle.None;
+                                owner.ShowInTaskbar = false;
+                                owner.StartPosition = FormStartPosition.CenterScreen;
+                                owner.Size = new System.Drawing.Size(1, 1);
+                                owner.Opacity = 0.0;
+                                owner.TopMost = true;
+                                owner.Show();
+                                owner.Activate();
+                                try { SetForegroundWindow(owner.Handle); } catch { }
 
-                if (!string.IsNullOrEmpty(chosen)) LoadPathIntoFolderList(chosen);
-                SendJson(stream, BuildFolderListJson());
+                                using (OpenFileDialog dlg = new OpenFileDialog())
+                                {
+                                    dlg.Title = "NillyView Pro — Άνοιγμα Εικόνας / RAW / SVG / PSD";
+                                    dlg.Filter = "Όλες οι εικόνες & RAW (62 formats)|*.jpg;*.jpeg;*.png;*.webp;*.avif;*.gif;*.svg;*.svgz;*.bmp;*.ico;*.heic;*.heif;*.jxl;*.tif;*.tiff;*.cr2;*.cr3;*.nef;*.arw;*.dng;*.raf;*.orf;*.rw2;*.pef;*.srw;*.raw;*.psd;*.tga;*.afdesign;*.afphoto;*.ai;*.eps|Camera RAW|*.cr2;*.cr3;*.crw;*.nef;*.nrw;*.arw;*.dng;*.raf;*.orf;*.rw2;*.pef;*.srw;*.raw;*.3fr;*.fff;*.iiq;*.x3f|Όλα τα αρχεία|*.*";
+                                    if (!string.IsNullOrEmpty(_currentFolder) && Directory.Exists(_currentFolder))
+                                        dlg.InitialDirectory = _currentFolder;
+                                    if (dlg.ShowDialog(owner) == DialogResult.OK) chosen = dlg.FileName;
+                                }
+                                owner.Close();
+                            }
+                        }
+                        catch { }
+                    });
+                    sta.SetApartmentState(ApartmentState.STA);
+                    sta.Start();
+                    sta.Join();
+
+                    if (!string.IsNullOrEmpty(chosen)) LoadPathIntoFolderList(chosen);
+                    SendJson(stream, BuildFolderListJson());
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _lastPingTicks, DateTime.UtcNow.Ticks);
+                    Interlocked.Decrement(ref _activeBusyOps);
+                }
                 return;
             }
 
@@ -641,9 +750,10 @@ namespace NillyViewPro
                 string target = GetFileAt(idx);
                 if (string.IsNullOrEmpty(target))
                 {
-                    HandleSaveAs(stream, req);
+                    HandleSaveAs(client, stream, req);
                     return;
                 }
+                Interlocked.Increment(ref _activeBusyOps);
                 try
                 {
                     AtomicWriteFile(target, req.Body);
@@ -655,72 +765,103 @@ namespace NillyViewPro
                 {
                     SendResponse(stream, 500, "Error", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(ex.Message), null);
                 }
+                finally
+                {
+                    Interlocked.Exchange(ref _lastPingTicks, DateTime.UtcNow.Ticks);
+                    Interlocked.Decrement(ref _activeBusyOps);
+                    TrimMemory();
+                }
                 return;
             }
 
             if (string.Equals(req.Path, "/api/saveas", StringComparison.OrdinalIgnoreCase) && req.Method == "POST")
             {
-                HandleSaveAs(stream, req);
+                HandleSaveAs(client, stream, req);
                 return;
             }
 
             SendResponse(stream, 404, "Not Found", "text/plain", Encoding.ASCII.GetBytes("Not found"), null);
         }
 
-        private static void HandleSaveAs(NetworkStream stream, HttpRequest req)
+        private static void HandleSaveAs(TcpClient client, NetworkStream stream, HttpRequest req)
         {
-            string suggested = "image.webp";
-            string qName;
-            if (req.Query.TryGetValue("name", out qName) && !string.IsNullOrEmpty(qName))
-                suggested = Path.GetFileName(qName);
-
-            string ext = Path.GetExtension(suggested).TrimStart('.').ToLowerInvariant();
-            if (string.IsNullOrEmpty(ext)) ext = "png";
-
-            string chosenPath = null;
-            string initDir = !string.IsNullOrEmpty(_currentFolder) && Directory.Exists(_currentFolder)
-                ? _currentFolder
-                : Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-
-            Thread sta = new Thread(delegate()
-            {
-                try
-                {
-                    using (SaveFileDialog dlg = new SaveFileDialog())
-                    {
-                        dlg.Title = "NillyView Pro — Αποθήκευση Εικόνας";
-                        dlg.Filter = "WebP Image (*.webp)|*.webp|JPEG Image (*.jpg)|*.jpg|PNG Image (*.png)|*.png|Windows Icon (*.ico)|*.ico|All files (*.*)|*.*";
-                        dlg.FilterIndex = ext == "webp" ? 1 : (ext == "jpg" || ext == "jpeg" ? 2 : (ext == "ico" ? 4 : 3));
-                        dlg.DefaultExt = ext;
-                        dlg.AddExtension = true;
-                        dlg.OverwritePrompt = true;
-                        dlg.InitialDirectory = initDir;
-                        dlg.FileName = suggested;
-                        if (dlg.ShowDialog() == DialogResult.OK) chosenPath = dlg.FileName;
-                    }
-                }
-                catch { }
-            });
-            sta.SetApartmentState(ApartmentState.STA);
-            sta.Start();
-            sta.Join();
-
-            if (string.IsNullOrEmpty(chosenPath))
-            {
-                SendResponse(stream, 204, "No Content", "text/plain", Encoding.ASCII.GetBytes("CANCELLED"), null);
-                return;
-            }
-
+            Interlocked.Increment(ref _activeBusyOps);
             try
             {
-                AtomicWriteFile(chosenPath, req.Body);
-                Dictionary<string, string> extra = new Dictionary<string, string>();
-                extra["X-Saved-Name"] = Uri.EscapeDataString(Path.GetFileName(chosenPath));
-                SendResponse(stream, 200, "OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes("SAVED"), extra);
+                try { client.SendTimeout = 0; client.ReceiveTimeout = 600000; } catch { }
+                string suggested = "image.webp";
+                string qName;
+                if (req.Query.TryGetValue("name", out qName) && !string.IsNullOrEmpty(qName))
+                    suggested = Path.GetFileName(qName);
+
+                string ext = Path.GetExtension(suggested).TrimStart('.').ToLowerInvariant();
+                if (string.IsNullOrEmpty(ext)) ext = "png";
+
+                string chosenPath = null;
+                string initDir = !string.IsNullOrEmpty(_currentFolder) && Directory.Exists(_currentFolder)
+                    ? _currentFolder
+                    : Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+
+                Thread sta = new Thread(delegate()
+                {
+                    try
+                    {
+                        using (Form owner = new Form())
+                        {
+                            owner.FormBorderStyle = FormBorderStyle.None;
+                            owner.ShowInTaskbar = false;
+                            owner.StartPosition = FormStartPosition.CenterScreen;
+                            owner.Size = new System.Drawing.Size(1, 1);
+                            owner.Opacity = 0.0;
+                            owner.TopMost = true;
+                            owner.Show();
+                            owner.Activate();
+                            try { SetForegroundWindow(owner.Handle); } catch { }
+
+                            using (SaveFileDialog dlg = new SaveFileDialog())
+                            {
+                                dlg.Title = "NillyView Pro — Αποθήκευση Εικόνας";
+                                dlg.Filter = "WebP Image (*.webp)|*.webp|JPEG Image (*.jpg)|*.jpg|PNG Image (*.png)|*.png|Windows Icon (*.ico)|*.ico|All files (*.*)|*.*";
+                                dlg.FilterIndex = ext == "webp" ? 1 : (ext == "jpg" || ext == "jpeg" ? 2 : (ext == "ico" ? 4 : 3));
+                                dlg.DefaultExt = ext;
+                                dlg.AddExtension = true;
+                                dlg.OverwritePrompt = true;
+                                dlg.InitialDirectory = initDir;
+                                dlg.FileName = suggested;
+                                if (dlg.ShowDialog(owner) == DialogResult.OK) chosenPath = dlg.FileName;
+                            }
+                            owner.Close();
+                        }
+                    }
+                    catch { }
+                });
+                sta.SetApartmentState(ApartmentState.STA);
+                sta.Start();
+                sta.Join();
+
+                if (string.IsNullOrEmpty(chosenPath))
+                {
+                    SendResponse(stream, 204, "No Content", "text/plain", Encoding.ASCII.GetBytes("CANCELLED"), null);
+                    return;
+                }
+
+                try
+                {
+                    AtomicWriteFile(chosenPath, req.Body);
+                    Dictionary<string, string> extra = new Dictionary<string, string>();
+                    extra["X-Saved-Name"] = Uri.EscapeDataString(Path.GetFileName(chosenPath));
+                    SendResponse(stream, 200, "OK", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes("SAVED"), extra);
+                }
+                catch (Exception ex)
+                {
+                    SendResponse(stream, 500, "Error", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(ex.Message), null);
+                }
             }
-            catch (Exception ex)
+            finally
             {
-                SendResponse(stream, 500, "Error", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes(ex.Message), null);
+                Interlocked.Exchange(ref _lastPingTicks, DateTime.UtcNow.Ticks);
+                Interlocked.Decrement(ref _activeBusyOps);
+                TrimMemory();
             }
         }
 
@@ -1402,7 +1543,15 @@ namespace NillyViewPro
         {
             string tmp = targetPath + ".nvtmp";
             File.WriteAllBytes(tmp, data);
-            if (File.Exists(targetPath)) File.Replace(tmp, targetPath, null);
+            if (File.Exists(targetPath))
+            {
+                try { File.Replace(tmp, targetPath, null); }
+                catch
+                {
+                    File.Copy(tmp, targetPath, true);
+                    try { File.Delete(tmp); } catch { }
+                }
+            }
             else File.Move(tmp, targetPath);
         }
 

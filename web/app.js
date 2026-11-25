@@ -952,14 +952,40 @@
     const cleanBase = (el.inpExportName.value || 'image').trim().replace(/[<>:"/\\|?*]+/g, '_').replace(/\.[^.]+$/, '');
     const fileName = `${cleanBase}.${ext}`;
 
+    // Acquire foreground native Save dialog IMMEDIATELY on user click (never hangs behind Edge --app!)
+    let pickedHandle = null;
+    if (!overwriteOriginal && typeof window.showSaveFilePicker === 'function') {
+      const mimeMap = {
+        webp: { description: 'WebP Image', accept: { 'image/webp': ['.webp'] } },
+        jpg:  { description: 'JPEG Image', accept: { 'image/jpeg': ['.jpg', '.jpeg'] } },
+        png:  { description: 'PNG Image',  accept: { 'image/png': ['.png'] } },
+        ico:  { description: 'Windows Icon', accept: { 'image/x-icon': ['.ico'] } }
+      };
+      try {
+        pickedHandle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [mimeMap[ext] || mimeMap.png]
+        });
+      } catch (pickErr) {
+        if (pickErr && pickErr.name === 'AbortError') return;
+        pickedHandle = null;
+      }
+    }
+
     el.btnConfirmExport.disabled = true;
     try {
       const bytes = await renderExportBytes(fmt, w, h, state.expQual);
-      if (DESKTOP_MODE && SESSION_TOKEN) {
-        const ep = overwriteOriginal
-          ? `/api/save?t=${encodeURIComponent(SESSION_TOKEN)}&i=${state.currentIdx}`
-          : `/api/saveas?t=${encodeURIComponent(SESSION_TOKEN)}&name=${encodeURIComponent(fileName)}`;
-        const resp = await fetch(ep, { method: 'POST', body: bytes });
+      if (pickedHandle) {
+        const writable = await pickedHandle.createWritable();
+        await writable.write(bytes);
+        await writable.close();
+        state.hasEdits = false;
+        el.modalExport.hidden = true;
+        showToast(`Αποθηκεύτηκε: ${pickedHandle.name || fileName} (${w}×${h} · ${formatBytes(bytes.byteLength)})`, 3400);
+        return;
+      }
+      if (overwriteOriginal && DESKTOP_MODE && SESSION_TOKEN) {
+        const resp = await fetch(`/api/save?t=${encodeURIComponent(SESSION_TOKEN)}&i=${state.currentIdx}`, { method: 'POST', body: bytes });
         if (resp.status === 204) return;
         if (!resp.ok) throw new Error(await resp.text());
         state.prefetchMap.delete(state.currentIdx);
