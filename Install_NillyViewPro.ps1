@@ -100,7 +100,7 @@ Set-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'NillyViewP
 
 try {
     Add-Type -Namespace NillyViewShell -Name Notify -MemberDefinition '[System.Runtime.InteropServices.DllImport("shell32.dll")] public static extern void SHChangeNotify(int wEventId, int uFlags, System.IntPtr dwItem1, System.IntPtr dwItem2);' -ErrorAction SilentlyContinue
-    [NillyViewShell.Notify]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)
+    [NillyViewShell.Notify]::SHChangeNotify(0x08000000, 0x2000, [IntPtr]::Zero, [IntPtr]::Zero)
 } catch {}
 
 Write-Host ("        OK -> Εγγράφηκαν " + $allExts.Count + " formats στο Άνοιγμα με... & στις Προεπιλεγμένες Εφαρμογές!") -ForegroundColor Green
