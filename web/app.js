@@ -100,6 +100,8 @@
     btnFullscreen: $('btnFullscreen'),
     btnPrintImg: $('btnPrintImg'),
     btnRevealExplorer: $('btnRevealExplorer'),
+    btnOpenBatch: $('btnOpenBatch'),
+    btnOpenCalcColor: $('btnOpenCalcColor'),
     btnDeleteRecycle: $('btnDeleteRecycle'),
     btnSaveOpen: $('btnSaveOpen'),
     btnThemeToggle: $('btnThemeToggle'),
@@ -1050,7 +1052,12 @@
   async function initDesktopBridge() {
     if (!DESKTOP_MODE || !SESSION_TOKEN) return;
     el.btnRevealExplorer.hidden = false;
+    if (el.btnOpenBatch) el.btnOpenBatch.hidden = false;
+    if (el.btnOpenCalcColor) el.btnOpenCalcColor.hidden = false;
     el.btnDeleteRecycle.hidden = false;
+    fetch(`/api/suite-theme?t=${encodeURIComponent(SESSION_TOKEN)}`).then((r) => r.status === 200 ? r.text() : '').then((th) => {
+      if (th === 'light' || th === 'dark') applyTheme(th);
+    }).catch(() => {});
 
     const ping = () => fetch(`/api/heartbeat?t=${encodeURIComponent(SESSION_TOKEN)}`, { method: 'POST', keepalive: true }).catch(() => {});
     ping();
@@ -1248,6 +1255,25 @@
       if (DESKTOP_MODE && SESSION_TOKEN)
         fetch(`/api/reveal?t=${encodeURIComponent(SESSION_TOKEN)}&i=${state.currentIdx}`, { method: 'POST' }).catch(() => {});
     });
+    if (el.btnOpenBatch) {
+      el.btnOpenBatch.addEventListener('click', () => {
+        closeMore();
+        if (DESKTOP_MODE && SESSION_TOKEN) {
+          fetch(`/api/open-sibling?t=${encodeURIComponent(SESSION_TOKEN)}&i=${state.currentIdx}&app=batch`, { method: 'POST' }).catch(() => {});
+          showToast('Άνοιγμα φακέλου στο NillyBatch Pro…');
+        }
+      });
+    }
+    if (el.btnOpenCalcColor) {
+      el.btnOpenCalcColor.addEventListener('click', () => {
+        closeMore();
+        if (DESKTOP_MODE && SESSION_TOKEN) {
+          const hex = (state.color && /^#[0-9a-f]{3,6}$/i.test(state.color)) ? state.color : '';
+          fetch(`/api/open-sibling?t=${encodeURIComponent(SESSION_TOKEN)}&i=${state.currentIdx}&app=calc&hex=${encodeURIComponent(hex)}`, { method: 'POST' }).catch(() => {});
+          showToast('Άνοιγμα στο NillyCalc Pro (CMYK / Studio)…');
+        }
+      });
+    }
     el.btnDeleteRecycle.addEventListener('click', async () => {
       closeMore();
       if (!DESKTOP_MODE || !SESSION_TOKEN || state.currentIdx < 0) return;

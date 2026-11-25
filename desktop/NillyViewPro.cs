@@ -29,8 +29,8 @@ using System.Windows.Media.Imaging;
 [assembly: AssemblyCompany("Nilly graphics (Sotiris Christos) — https://nillygraphics.com/")]
 [assembly: AssemblyProduct("NillyView Pro")]
 [assembly: AssemblyCopyright("Copyright (c) Nilly graphics (Sotiris Christos)")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
 
 namespace NillyViewPro
 {
@@ -708,9 +708,44 @@ namespace NillyViewPro
                 string filePath = GetFileAt(ParseQueryIndex(req));
                 if (!string.IsNullOrEmpty(filePath) && File.Exists(filePath))
                 {
-                    try { Process.Start("explorer.exe", "/select,\"" + filePath + "\""); } catch { }
+                    string filesExe = FindSiblingExe("NillyFilesPro", "NillyFilesPro.exe");
+                    if (filesExe != null)
+                        try { Process.Start(new ProcessStartInfo(filesExe, "\"" + Path.GetDirectoryName(filePath) + "\"") { WorkingDirectory = Path.GetDirectoryName(filesExe), UseShellExecute = true }); } catch { }
+                    else
+                        try { Process.Start("explorer.exe", "/select,\"" + filePath + "\""); } catch { }
                 }
                 SendResponse(stream, 204, "No Content", null, null, null);
+                return;
+            }
+
+            if (string.Equals(req.Path, "/api/open-sibling", StringComparison.OrdinalIgnoreCase) && req.Method == "POST")
+            {
+                string app = null; req.Query.TryGetValue("app", out app);
+                string hex = null; req.Query.TryGetValue("hex", out hex);
+                string filePath = GetFileAt(ParseQueryIndex(req));
+                if (string.Equals(app, "batch", StringComparison.OrdinalIgnoreCase))
+                {
+                    string batchExe = FindSiblingExe("NillyBatchPro", "NillyBatchPro.exe");
+                    string target = (!string.IsNullOrEmpty(filePath) && File.Exists(filePath)) ? Path.GetDirectoryName(filePath) : "";
+                    if (batchExe != null)
+                        try { Process.Start(new ProcessStartInfo(batchExe, string.IsNullOrEmpty(target) ? "" : ("\"" + target + "\"")) { WorkingDirectory = Path.GetDirectoryName(batchExe), UseShellExecute = true }); } catch { }
+                }
+                else if (string.Equals(app, "calc", StringComparison.OrdinalIgnoreCase))
+                {
+                    string calcExe = FindSiblingExe("NillyCalcPro", "NillyCalcPro.exe");
+                    string arg = (!string.IsNullOrEmpty(hex) && hex.StartsWith("#")) ? ("--hex \"" + hex.Replace("\"", "") + "\"") : "";
+                    if (calcExe != null)
+                        try { Process.Start(new ProcessStartInfo(calcExe, arg) { WorkingDirectory = Path.GetDirectoryName(calcExe), UseShellExecute = true }); } catch { }
+                }
+                SendResponse(stream, 204, "No Content", null, null, null);
+                return;
+            }
+
+            if (string.Equals(req.Path, "/api/suite-theme", StringComparison.OrdinalIgnoreCase))
+            {
+                string th = ReadSuiteTheme();
+                if (!string.IsNullOrEmpty(th)) SendResponse(stream, 200, "OK", "text/plain", Encoding.ASCII.GetBytes(th), null);
+                else SendResponse(stream, 204, "No Content", null, null, null);
                 return;
             }
 
@@ -781,6 +816,38 @@ namespace NillyViewPro
             }
 
             SendResponse(stream, 404, "Not Found", "text/plain", Encoding.ASCII.GetBytes("Not found"), null);
+        }
+
+        private static string FindSiblingExe(string folder, string exeName)
+        {
+            try
+            {
+                string appData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"NillySuite\" + folder + @"\" + exeName);
+                if (File.Exists(appData)) return appData;
+                DirectoryInfo par = Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\'));
+                if (par != null)
+                {
+                    string sib = Path.Combine(Path.Combine(par.FullName, folder), exeName);
+                    if (File.Exists(sib)) return sib;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static string ReadSuiteTheme()
+        {
+            try
+            {
+                string p = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"NillySuite\suite.theme");
+                if (File.Exists(p))
+                {
+                    string s = File.ReadAllText(p, Encoding.ASCII).Trim().ToLowerInvariant();
+                    if (s == "light" || s == "dark") return s;
+                }
+            }
+            catch { }
+            return null;
         }
 
         private static void HandleSaveAs(TcpClient client, NetworkStream stream, HttpRequest req)
