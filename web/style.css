@@ -5,16 +5,16 @@
  * ============================================================================ */
 
 :root {
-  --desk: #141519;
-  --chrome: #1A1C22;
-  --chrome-elev: #1F2229;
-  --surface: #24272F;
-  --surface-hover: #2E323D;
+  --desk: #181A1B;
+  --chrome: #222426;
+  --chrome-elev: #27292B;
+  --surface: #27292B;
+  --surface-hover: #303336;
   --border: rgba(255, 255, 255, 0.085);
-  --border-strong: #363B47;
-  --text: #F0F4FA;
-  --text-muted: #949DB0;
-  --text-dim: #6C7485;
+  --border-strong: #36393D;
+  --text: #F2F4F7;
+  --text-muted: #9AA0A8;
+  --text-dim: #6C727A;
   --accent: #FC961F;
   --accent-hover: #FFA940;
   --accent-soft: rgba(252, 150, 31, 0.16);

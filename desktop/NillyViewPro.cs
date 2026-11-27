@@ -29,8 +29,8 @@ using System.Windows.Media.Imaging;
 [assembly: AssemblyCompany("Nilly graphics (Sotiris Christos) — https://nillygraphics.com/")]
 [assembly: AssemblyProduct("NillyView Pro")]
 [assembly: AssemblyCopyright("Copyright (c) Nilly graphics (Sotiris Christos)")]
-[assembly: AssemblyVersion("1.3.2.0")]
-[assembly: AssemblyFileVersion("1.3.2.0")]
+[assembly: AssemblyVersion("1.3.3.0")]
+[assembly: AssemblyFileVersion("1.3.3.0")]
 
 namespace NillyViewPro
 {
@@ -741,6 +741,30 @@ namespace NillyViewPro
                 return;
             }
 
+            if (string.Equals(req.Path, "/api/update-info", StringComparison.OrdinalIgnoreCase))
+            {
+                string curT, newT;
+                bool avail = false;
+                try { avail = SuiteUpdater.CheckForUpdate("nillyview-pro", out curT, out newT); } catch { curT = ""; newT = ""; }
+                string j = avail
+                    ? ("{\"available\":true,\"current\":\"" + (curT ?? "") + "\",\"latest\":\"" + (newT ?? "") + "\"}")
+                    : "{\"available\":false}";
+                SendJson(stream, j);
+                return;
+            }
+
+            if (string.Equals(req.Path, "/api/update-apply", StringComparison.OrdinalIgnoreCase) && req.Method == "POST")
+            {
+                SendResponse(stream, 200, "OK", "text/plain", Encoding.ASCII.GetBytes("UPDATING"), null);
+                System.Threading.Thread uth = new System.Threading.Thread(delegate()
+                {
+                    try { SuiteUpdater.ApplySelfUpdate("nillyview-pro", "NillyView-Pro", "Install_NillyViewPro.ps1", null, delegate { System.Environment.Exit(0); }); }
+                    catch { }
+                });
+                uth.IsBackground = true;
+                uth.Start();
+                return;
+            }
             if (string.Equals(req.Path, "/api/suite-theme", StringComparison.OrdinalIgnoreCase))
             {
                 string th = ReadSuiteTheme();
@@ -1678,6 +1702,248 @@ namespace NillyViewPro
             stream.Write(hdr, 0, hdr.Length);
             if (body != null && len > 0) stream.Write(body, 0, len);
             stream.Flush();
+        }
+    }
+
+    internal static class SuiteUpdater
+    {
+        private const string CATALOG_URL = "https://raw.githubusercontent.com/nillynp/nillyhub/main/catalog.json";
+
+        private static bool TryParseVer(string raw, out System.Version ver)
+        {
+            ver = null;
+            if (string.IsNullOrEmpty(raw)) return false;
+            string s = raw.Trim();
+            if (s.StartsWith("v", System.StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
+            string[] p = s.Split('.');
+            if (p.Length < 2 || p.Length > 4) return false;
+            int maj, min, pat = 0;
+            if (!int.TryParse(p[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out maj)) return false;
+            if (!int.TryParse(p[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out min)) return false;
+            if (p.Length >= 3 && !int.TryParse(p[2], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out pat)) return false;
+            ver = new System.Version(maj, min, pat, 0);
+            return true;
+        }
+
+        private static string FmtVer(System.Version v)
+        {
+            return v.Build > 0
+                ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "v{0}.{1}.{2}", v.Major, v.Minor, v.Build)
+                : string.Format(System.Globalization.CultureInfo.InvariantCulture, "v{0}.{1}", v.Major, v.Minor);
+        }
+
+        public static bool CheckForUpdate(string repoName, out string curTag, out string newTag)
+        {
+            curTag = null; newTag = null;
+            System.Version rawCur = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            System.Version curVer = new System.Version(rawCur.Major, rawCur.Minor, rawCur.Build >= 0 ? rawCur.Build : 0, 0);
+            curTag = FmtVer(curVer);
+
+            string suiteDir = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "NillySuite");
+            string cachePath = System.IO.Path.Combine(suiteDir, ".nillyhub_catalog.json");
+            string json = null;
+            try
+            {
+                if (System.IO.File.Exists(cachePath))
+                {
+                    System.DateTime wt = System.IO.File.GetLastWriteTimeUtc(cachePath);
+                    if ((System.DateTime.UtcNow - wt).TotalHours < 24.0)
+                    {
+                        string cached = System.IO.File.ReadAllText(cachePath, System.Text.Encoding.UTF8);
+                        if (cached.IndexOf("\"latestVersion\"", System.StringComparison.Ordinal) >= 0) json = cached;
+                    }
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(json))
+            {
+                json = HttpGetText(CATALOG_URL, 5000);
+                if (string.IsNullOrEmpty(json) || json.Length > 256 * 1024) return false;
+                try
+                {
+                    System.IO.Directory.CreateDirectory(suiteDir);
+                    System.IO.File.WriteAllText(cachePath, json, new System.Text.UTF8Encoding(false));
+                }
+                catch { }
+            }
+
+            System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(
+                json,
+                "\"repo\"\\s*:\\s*\"" + System.Text.RegularExpressions.Regex.Escape(repoName) + "\"[^\\}]{0,500}?\"latestVersion\"\\s*:\\s*\"(v[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)\"",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!m.Success) return false;
+            System.Version remVer;
+            if (!TryParseVer(m.Groups[1].Value, out remVer) || remVer <= curVer) return false;
+            newTag = FmtVer(remVer);
+            return true;
+        }
+
+        private static string HttpGetText(string url, int timeoutMs)
+        {
+            try { System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072 | System.Net.SecurityProtocolType.Tls12; } catch { }
+            System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
+            req.UserAgent = "NillySuite-Updater/1.0 (https://nillygraphics.com/)";
+            req.Accept = "application/vnd.github+json, application/json";
+            req.AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate;
+            req.Timeout = timeoutMs;
+            req.ReadWriteTimeout = timeoutMs;
+            using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)req.GetResponse())
+            using (System.IO.Stream st = resp.GetResponseStream())
+            using (System.IO.StreamReader sr = new System.IO.StreamReader(st, System.Text.Encoding.UTF8))
+                return sr.ReadToEnd();
+        }
+
+        private static string ExtractAssetBlock(string json, string assetName)
+        {
+            System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(
+                json, "\"name\"\\s*:\\s*\"" + System.Text.RegularExpressions.Regex.Escape(assetName) + "\"");
+            if (!m.Success) return null;
+            int start = m.Index;
+            int depth = 0;
+            while (start > 0)
+            {
+                char c = json[start];
+                if (c == '}') depth++;
+                else if (c == '{') { if (depth == 0) break; depth--; }
+                start--;
+            }
+            int end = start;
+            depth = 0;
+            bool inStr = false;
+            for (int i = start; i < json.Length; i++)
+            {
+                char c = json[i];
+                if (c == '"' && (i == 0 || json[i - 1] != '\\')) inStr = !inStr;
+                if (inStr) continue;
+                if (c == '{') depth++;
+                else if (c == '}') { depth--; if (depth == 0) { end = i; break; } }
+            }
+            return end > start ? json.Substring(start, end - start + 1) : null;
+        }
+
+        public static void ApplySelfUpdate(string repoName, string pkgPrefix, string installerScript, System.Action<string> onStatus, System.Action onExit)
+        {
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string appDir = System.IO.Path.GetDirectoryName(exePath);
+            if (System.IO.Directory.Exists(System.IO.Path.Combine(appDir, ".git")))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://github.com/nillynp/" + repoName + "/releases/latest") { UseShellExecute = true });
+                if (onStatus != null) onStatus("Άνοιξε το GitHub Release (φάκελος Git).");
+                return;
+            }
+
+            if (onStatus != null) onStatus("Έλεγχος SHA-256 στο GitHub...");
+            string relJson = HttpGetText("https://api.github.com/repos/nillynp/" + repoName + "/releases/latest", 12000);
+            if (string.IsNullOrEmpty(relJson)) throw new System.IO.InvalidDataException("Κενή απόκριση GitHub.");
+            if (System.Text.RegularExpressions.Regex.IsMatch(relJson, "\"draft\"\\s*:\\s*true") ||
+                System.Text.RegularExpressions.Regex.IsMatch(relJson, "\"prerelease\"\\s*:\\s*true"))
+                throw new System.IO.InvalidDataException("Μη σταθερή έκδοση.");
+
+            System.Text.RegularExpressions.Match tm = System.Text.RegularExpressions.Regex.Match(relJson, "\"tag_name\"\\s*:\\s*\"(v[0-9]+\\.[0-9]+(?:\\.[0-9]+)?)\"");
+            if (!tm.Success) throw new System.IO.InvalidDataException("Μη έγκυρο tag έκδοσης.");
+            string tag = tm.Groups[1].Value;
+
+            System.Version curRaw = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            System.Version curVer = new System.Version(curRaw.Major, curRaw.Minor, curRaw.Build >= 0 ? curRaw.Build : 0, 0);
+            System.Version remVer;
+            if (!TryParseVer(tag, out remVer) || remVer <= curVer)
+                throw new System.InvalidOperationException("Έχεις ήδη την τελευταία έκδοση.");
+
+            string zipName = pkgPrefix + "-" + tag + "-Portable.zip";
+            string expectedUrl = "https://github.com/nillynp/" + repoName + "/releases/download/" + tag + "/" + zipName;
+            string blk = ExtractAssetBlock(relJson, zipName);
+            if (string.IsNullOrEmpty(blk)) throw new System.IO.FileNotFoundException("Δεν βρέθηκε το Portable ZIP.");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(blk, "\"state\"\\s*:\\s*\"uploaded\""))
+                throw new System.IO.InvalidDataException("Το αρχείο δεν είναι έτοιμο.");
+            System.Text.RegularExpressions.Match um = System.Text.RegularExpressions.Regex.Match(blk, "\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"");
+            if (!um.Success || !string.Equals(um.Groups[1].Value, expectedUrl, System.StringComparison.Ordinal))
+                throw new System.IO.InvalidDataException("Μη έγκυρο URL λήψης.");
+            System.Text.RegularExpressions.Match dm = System.Text.RegularExpressions.Regex.Match(blk, "\"digest\"\\s*:\\s*\"sha256:([0-9a-f]{64})\"");
+            if (!dm.Success) throw new System.IO.InvalidDataException("Απουσιάζει SHA-256.");
+            string expectedSha = dm.Groups[1].Value;
+
+            string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "NillyUpd-" + System.Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(tmpDir);
+            string zipFile = System.IO.Path.Combine(tmpDir, "pkg.zip");
+
+            if (onStatus != null) onStatus("Λήψη " + tag + "...");
+            try { System.Net.ServicePointManager.SecurityProtocol |= (System.Net.SecurityProtocolType)3072 | System.Net.SecurityProtocolType.Tls12; } catch { }
+            System.Net.HttpWebRequest dreq = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(expectedUrl);
+            dreq.UserAgent = "NillySuite-Updater/1.0 (https://nillygraphics.com/)";
+            dreq.Timeout = 20000;
+            dreq.ReadWriteTimeout = 30000;
+            using (System.Net.HttpWebResponse dresp = (System.Net.HttpWebResponse)dreq.GetResponse())
+            using (System.IO.Stream src = dresp.GetResponseStream())
+            using (System.IO.FileStream dst = new System.IO.FileStream(zipFile, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
+            {
+                byte[] buf = new byte[16384];
+                int n; long total = 0;
+                while ((n = src.Read(buf, 0, buf.Length)) > 0)
+                {
+                    total += n;
+                    if (total > 32L * 1024L * 1024L) throw new System.IO.InvalidDataException("Υπέρβαση μεγέθους ZIP.");
+                    dst.Write(buf, 0, n);
+                }
+            }
+
+            if (onStatus != null) onStatus("Επαλήθευση SHA-256...");
+            string actualSha;
+            using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+            using (System.IO.FileStream fs = System.IO.File.OpenRead(zipFile))
+            {
+                byte[] hash = sha.ComputeHash(fs);
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(64);
+                for (int i = 0; i < hash.Length; i++) sb.Append(hash[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
+                actualSha = sb.ToString();
+            }
+            if (!string.Equals(actualSha, expectedSha, System.StringComparison.OrdinalIgnoreCase))
+            {
+                try { System.IO.Directory.Delete(tmpDir, true); } catch { }
+                throw new System.IO.InvalidDataException("Αποτυχία ελέγχου SHA-256.");
+            }
+
+            if (onStatus != null) onStatus("Εγκατάσταση " + tag + " & επανεκκίνηση...");
+            string ps1 = System.IO.Path.Combine(tmpDir, "apply.ps1");
+            string script =
+                "param($myPid,$zip,$appDir,$instName,$exePath,$tag)\r\n" +
+                "for($i=0;$i -lt 60;$i++){ if(-not (Get-Process -Id $myPid -ErrorAction SilentlyContinue)){break}; Start-Sleep -Milliseconds 150 }\r\n" +
+                "Add-Type -AssemblyName System.IO.Compression.FileSystem\r\n" +
+                "$za = [System.IO.Compression.ZipFile]::OpenRead($zip)\r\n" +
+                "try {\r\n" +
+                "  $pref = $null; $shared = $true\r\n" +
+                "  foreach($e in $za.Entries){ $fn=$e.FullName -replace '\\\\','/'; $sl=$fn.IndexOf('/'); if($sl -le 0){$shared=$false;break}; $p=$fn.Substring(0,$sl+1); if(-not $pref){$pref=$p}elseif(-not $pref.Equals($p,[StringComparison]::OrdinalIgnoreCase)){$shared=$false;break} }\r\n" +
+                "  $rootFull = [System.IO.Path]::GetFullPath($appDir).TrimEnd('\\') + '\\'\r\n" +
+                "  foreach($e in $za.Entries){\r\n" +
+                "    $rel = $e.FullName -replace '\\\\','/'\r\n" +
+                "    if($shared -and $pref -and $rel.StartsWith($pref,[StringComparison]::OrdinalIgnoreCase)){ $rel=$rel.Substring($pref.Length) }\r\n" +
+                "    if([string]::IsNullOrEmpty($rel) -or $rel.EndsWith('/') -or $rel.Contains(':')){ continue }\r\n" +
+                "    $dst = [System.IO.Path]::GetFullPath((Join-Path $appDir ($rel -replace '/','\\')))\r\n" +
+                "    if(-not $dst.StartsWith($rootFull,[StringComparison]::OrdinalIgnoreCase)){ continue }\r\n" +
+                "    $par = Split-Path -Parent $dst; if($par){ New-Item -ItemType Directory -Force -Path $par | Out-Null }\r\n" +
+                "    for($k=0;$k -lt 5;$k++){ try { [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e,$dst,$true); break } catch { Start-Sleep -Milliseconds 250 } }\r\n" +
+                "  }\r\n" +
+                "} finally { $za.Dispose() }\r\n" +
+                "$bak = $exePath + '.bak'\r\n" +
+                "if(Test-Path $exePath){ Copy-Item -LiteralPath $exePath -Destination $bak -Force -ErrorAction SilentlyContinue; for($k=0;$k -lt 5;$k++){ try { Remove-Item -LiteralPath $exePath -Force -ErrorAction Stop; break } catch { Start-Sleep -Milliseconds 250 } } }\r\n" +
+                "Get-ChildItem (Join-Path $appDir 'desktop') -Filter '*.cs' -ErrorAction SilentlyContinue | ForEach-Object { $_.LastWriteTimeUtc = [DateTime]::UtcNow }\r\n" +
+                "if($instName -and (Test-Path (Join-Path $appDir $instName))){ & (Join-Path $appDir $instName) -Silent 2>$null | Out-Null }\r\n" +
+                "if(-not (Test-Path $exePath) -and (Test-Path $bak)){ Move-Item -LiteralPath $bak -Destination $exePath -Force -ErrorAction SilentlyContinue } else { Remove-Item -LiteralPath $bak -Force -ErrorAction SilentlyContinue }\r\n" +
+                "if($tag){ Set-Content -LiteralPath (Join-Path $appDir '.nilly_version') -Value $tag -Encoding UTF8 -ErrorAction SilentlyContinue }\r\n" +
+                "if(Test-Path $exePath){ Start-Process -FilePath $exePath -WorkingDirectory $appDir }\r\n" +
+                "Start-Sleep -Milliseconds 400\r\n" +
+                "Remove-Item -LiteralPath (Split-Path $zip) -Recurse -Force -ErrorAction SilentlyContinue\r\n";
+            System.IO.File.WriteAllText(ps1, script, new System.Text.UTF8Encoding(false));
+
+            int myPid = System.Diagnostics.Process.GetCurrentProcess().Id;
+            System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(
+                "powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + ps1 + "\" " +
+                myPid + " \"" + zipFile + "\" \"" + appDir + "\" \"" + installerScript + "\" \"" + exePath + "\" \"" + tag + "\"");
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            System.Diagnostics.Process.Start(psi);
+            if (onExit != null) onExit();
         }
     }
 }

@@ -1058,6 +1058,26 @@
     fetch(`/api/suite-theme?t=${encodeURIComponent(SESSION_TOKEN)}`).then((r) => r.status === 200 ? r.text() : '').then((th) => {
       if (th === 'light' || th === 'dark') applyTheme(th);
     }).catch(() => {});
+    setTimeout(() => {
+      fetch(`/api/update-info?t=${encodeURIComponent(SESSION_TOKEN)}`).then((r) => r.ok ? r.json() : null).then((d) => {
+        if (!d || !d.available || !d.latest) return;
+        const themeBtn = document.getElementById('btnThemeToggle');
+        if (!themeBtn || !themeBtn.parentNode || document.getElementById('btnSuiteUpdate')) return;
+        const b = document.createElement('button');
+        b.id = 'btnSuiteUpdate';
+        b.className = 'primary-btn';
+        b.style.cssText = 'background:#FC961F;color:#14161A;font-weight:700;padding:4px 10px;border-radius:6px;font-size:12px;border:none;cursor:pointer;';
+        b.textContent = `↑ ${d.latest}`;
+        b.title = `Νέα έκδοση ${d.latest} διαθέσιμη (έχεις ${d.current}) — Κλικ για αυτόματη SHA-256 ενημέρωση`;
+        b.addEventListener('click', () => {
+          b.disabled = true; b.textContent = 'Ενημέρωση...';
+          fetch(`/api/update-apply?t=${encodeURIComponent(SESSION_TOKEN)}`, { method: 'POST' })
+            .then((r) => { if (!r.ok) throw new Error(); b.textContent = 'Επανεκκίνηση...'; })
+            .catch(() => { b.disabled = false; b.textContent = `↑ ${d.latest}`; });
+        });
+        themeBtn.parentNode.insertBefore(b, themeBtn);
+      }).catch(() => {});
+    }, 2200);
 
     const ping = () => fetch(`/api/heartbeat?t=${encodeURIComponent(SESSION_TOKEN)}`, { method: 'POST', keepalive: true }).catch(() => {});
     ping();
